@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/pyxel-dev/Tiny-Tokens/discussions
+    about: For usage questions or general discussion, please use GitHub Discussions instead of an issue.

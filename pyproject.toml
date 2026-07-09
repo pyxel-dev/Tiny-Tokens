@@ -1,0 +1,15 @@
+[project]
+name = "tiny-tokens"
+version = "0.0.0"
+description = "CLI proxy for reducing LLM token consumption"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [
+    { name = "Kevin Py" },
+]
+requires-python = ">=3.10"
+keywords = ["cli", "llm", "tokens", "proxy"]
+
+[project.urls]
+Homepage = "https://github.com/pyxel-dev/Tiny-Tokens"
+Repository = "https://github.com/pyxel-dev/Tiny-Tokens"
