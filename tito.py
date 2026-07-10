@@ -341,9 +341,9 @@ def cmd_gain_reset(args):
 
 # --- extensions registry --------------------------------------------------
 
-# Official extensions registry (github.com/Tiny-Tokens/tito). Override
+# Official extensions registry (github.com/pyxel-dev/Tiny-Tokens). Override
 # with the TITO_REGISTRY env var if you publish extensions elsewhere.
-REGISTRY_URL = "https://raw.githubusercontent.com/Tiny-Tokens/tito/main/extensions"
+REGISTRY_URL = "https://raw.githubusercontent.com/pyxel-dev/Tiny-Tokens/main/extensions"
 
 
 def registry_url():
