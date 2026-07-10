@@ -1,0 +1,264 @@
+name: PR Version And Commits
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+      - ready_for_review
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-pr-metadata:
+    if: github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.ref == 'develop' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ensure main branch exists
+        uses: actions/github-script@v9
+        with:
+          script: |
+            try {
+              await github.rest.repos.getBranch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: "main",
+              });
+            } catch (error) {
+              core.setFailed("Branch 'main' does not exist yet. Create it before opening PRs from develop to main.");
+            }
+
+      - name: Validate PR version
+        id: version
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const version = pr.title.trim();
+
+            if (!/^\d+\.\d+\.\d+$/.test(version)) {
+              core.setFailed("PR title must be a version in x.y.z format, for example 1.2.3.");
+              return;
+            }
+
+            core.setOutput("version", version);
+
+      - name: Commit PR version
+        uses: actions/github-script@v9
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        with:
+          script: |
+            const version = process.env.VERSION;
+            const { owner, repo } = context.repo;
+            const headBranch = context.payload.pull_request.head.ref;
+
+            // Helper: return true when an Octokit error is a 422 whose message matches the
+            // given substring. GitHub's documented error messages for createRef and
+            // pulls.create are stable, but we centralise the check here so any future
+            // adjustment only needs one edit.
+            const is422 = (e, msg) =>
+              e.status === 422 &&
+              String(e.response?.data?.message || e.message).includes(msg);
+
+            const { data: file } = await github.rest.repos.getContent({
+              owner, repo, path: "pyproject.toml", ref: headBranch,
+            });
+
+            const content = Buffer.from(file.content, "base64").toString("utf8");
+
+            if (!/^version\s*=\s*"\d+\.\d+\.\d+"\s*$/m.test(content)) {
+              core.setFailed("Unable to find one project version in pyproject.toml.");
+              return;
+            }
+
+            const updated = content.replace(
+              /^version\s*=\s*"\d+\.\d+\.\d+"\s*$/m,
+              `version = "${version}"`,
+            );
+
+            if (content === updated) {
+              core.info(`pyproject.toml already has version ${version}.`);
+              return;
+            }
+
+            const sanitizedVersion = version.replace(/\./g, "-");
+            const tempBranch = `ci/version-bump-${sanitizedVersion}-${context.runId}`;
+
+            const { data: baseRef } = await github.rest.git.getRef({
+              owner, repo, ref: `heads/${headBranch}`,
+            });
+
+            try {
+              await github.rest.git.createRef({
+                owner, repo, ref: `refs/heads/${tempBranch}`, sha: baseRef.object.sha,
+              });
+            } catch (e) {
+              if (is422(e, "Reference already exists")) {
+                core.warning(
+                  `Temp branch ${tempBranch} already exists (likely a retried run). ` +
+                  `Force-updating to current HEAD of ${headBranch}.`
+                );
+                await github.rest.git.updateRef({
+                  owner, repo, ref: `heads/${tempBranch}`, sha: baseRef.object.sha, force: true,
+                });
+              } else {
+                throw e;
+              }
+            }
+
+            // Re-fetch from tempBranch to obtain the SHA that createOrUpdateFileContents
+            // requires. Using file.sha from the earlier read would cause a 409 if headBranch
+            // advanced between that read and the branch creation above, because tempBranch
+            // would then point to a different commit than file.sha.
+            const { data: fileOnTemp } = await github.rest.repos.getContent({
+              owner, repo, path: "pyproject.toml", ref: tempBranch,
+            });
+
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path: "pyproject.toml",
+              message: `ci(core): bump version to ${version}`,
+              content: Buffer.from(updated).toString("base64"),
+              sha: fileOnTemp.sha,
+              branch: tempBranch,
+            });
+
+            let bumpPrNumber;
+            try {
+              const { data: bumpPr } = await github.rest.pulls.create({
+                owner, repo,
+                title: `ci(core): bump version to ${version}`,
+                head: tempBranch,
+                base: headBranch,
+                body: `Automated version bump to ${version}.`,
+              });
+              bumpPrNumber = bumpPr.number;
+            } catch (e) {
+              if (is422(e, "A pull request already exists for")) {
+                const { data: existing } = await github.rest.pulls.list({
+                  owner, repo, head: `${owner}:${tempBranch}`, base: headBranch, state: "open",
+                });
+                if (existing.length > 0) {
+                  core.warning(`PR from ${tempBranch} already exists (#${existing[0].number}); reusing it.`);
+                  bumpPrNumber = existing[0].number;
+                } else {
+                  throw e;
+                }
+              } else {
+                throw e;
+              }
+            }
+
+            const deleteTempBranch = async () => {
+              try {
+                await github.rest.git.deleteRef({
+                  owner, repo, ref: `heads/${tempBranch}`,
+                });
+              } catch (deleteErr) {
+                core.warning(
+                  `Could not delete temp branch ${tempBranch} ` +
+                  `(HTTP ${deleteErr.status ?? "unknown"}): ${deleteErr.message}`
+                );
+              }
+            };
+
+            try {
+              await github.rest.pulls.merge({
+                owner, repo,
+                pull_number: bumpPrNumber,
+                merge_method: "squash",
+                commit_title: `ci(core): bump version to ${version}`,
+              });
+            } catch (mergeErr) {
+              core.error(
+                `Merge details — HTTP ${mergeErr.status ?? "unknown"}: ` +
+                JSON.stringify(mergeErr.response?.data ?? mergeErr.message)
+              );
+              try {
+                await github.rest.pulls.update({
+                  owner, repo, pull_number: bumpPrNumber, state: "closed",
+                });
+              } catch (closeErr) {
+                core.warning(`Could not close PR #${bumpPrNumber}: ${closeErr.message}`);
+              }
+              await deleteTempBranch();
+              core.setFailed(
+                `Automated merge of version bump PR #${bumpPrNumber} failed: ${mergeErr.message}. ` +
+                `This may be caused by required reviews, status checks, merge conflicts, ` +
+                `or other branch protection settings on the '${headBranch}' branch.`
+              );
+              return;
+            }
+
+            await deleteTempBranch();
+      - name: Build commit list
+        id: build
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const version = pr.title.trim();
+
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner,
+              repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+
+            const commitLines = commits.map(commit => {
+              const shortSha = commit.sha.substring(0, 7);
+              const subject = (commit.commit.message || "").split("\n")[0].trim();
+              return `- ${shortSha} ${subject}`;
+            });
+
+            const bodyLines = [
+              "## Commit List",
+              "",
+              ...commitLines,
+            ];
+
+            const body = bodyLines.join("\n");
+
+            core.setOutput("version", version);
+            core.setOutput("body", body);
+
+      - name: Update PR body
+        uses: actions/github-script@v9
+        env:
+          PR_BODY: ${{ steps.build.outputs.body }}
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const newBody = process.env.PR_BODY || "";
+
+            if ((pr.body || "") === newBody) {
+              core.info("PR body is already up to date.");
+              return;
+            }
+
+            try {
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                body: newBody,
+              });
+              core.info("PR body updated successfully.");
+            } catch (error) {
+              if (error.status === 403) {
+                core.setFailed("Unable to update this PR with GITHUB_TOKEN permissions (likely fork restrictions). Update title/body manually or use pull_request_target with strict safeguards.");
+                return;
+              }
+              throw error;
+            }
