@@ -19,11 +19,13 @@ class MainDispatchTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("usage:", out.getvalue())
 
-    def test_unknown_command_prints_usage_and_returns_zero(self):
-        with mock.patch("sys.stdout", new=io.StringIO()) as out:
-            rc = tito.main(["frobnicate", "x"])
+    def test_non_meta_command_dispatches_to_run(self):
+        # Non-meta commands fall through to dispatch() (the passthrough
+        # wrapper) rather than printing usage.
+        with mock.patch.object(tito, "dispatch", return_value=0) as m:
+            rc = tito.main(["git", "status"])
+        m.assert_called_once_with(["git", "status"])
         self.assertEqual(rc, 0)
-        self.assertIn("usage:", out.getvalue())
 
     def test_install_dispatches_to_cmd_install(self):
         with mock.patch.object(tito, "cmd_install", return_value=0) as m:
