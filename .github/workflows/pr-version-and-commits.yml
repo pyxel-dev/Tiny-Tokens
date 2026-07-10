@@ -1,0 +1,157 @@
+name: PR Version And Commits
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+      - ready_for_review
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-pr-metadata:
+    if: github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.ref == 'develop' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ensure main branch exists
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.repos.getBranch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: "main",
+              });
+            } catch (error) {
+              core.setFailed("Branch 'main' does not exist yet. Create it before opening PRs from develop to main.");
+            }
+
+      - name: Validate PR version
+        id: version
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const version = pr.title.trim();
+
+            if (!/^\d+\.\d+\.\d+$/.test(version)) {
+              core.setFailed("PR title must be a version in x.y.z format, for example 1.2.3.");
+              return;
+            }
+
+            core.setOutput("version", version);
+
+      - name: Check out develop
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Commit PR version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          python3 - "$VERSION" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          path = Path("pyproject.toml")
+          content = path.read_text()
+          updated, count = re.subn(
+              r'^version\s*=\s*"\d+\.\d+\.\d+"\s*$',
+              f'version = "{sys.argv[1]}"',
+              content,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          if count != 1:
+              raise SystemExit("Unable to find one project version in pyproject.toml.")
+          path.write_text(updated)
+          PY
+
+          if git diff --quiet -- pyproject.toml; then
+            echo "pyproject.toml already has version $VERSION."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          git commit -m "$VERSION"
+          git push origin "HEAD:$BRANCH"
+
+      - name: Build commit list
+        id: build
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const version = pr.title.trim();
+
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner,
+              repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+
+            const commitLines = commits.map(commit => {
+              const shortSha = commit.sha.substring(0, 7);
+              const subject = (commit.commit.message || "").split("\n")[0].trim();
+              return `- ${shortSha} ${subject}`;
+            });
+
+            const bodyLines = [
+              "## Commit List",
+              "",
+              ...commitLines,
+            ];
+
+            const body = bodyLines.join("\n");
+
+            core.setOutput("version", version);
+            core.setOutput("body", body);
+
+      - name: Update PR body
+        uses: actions/github-script@v7
+        env:
+          PR_BODY: ${{ steps.build.outputs.body }}
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const newBody = process.env.PR_BODY || "";
+
+            if ((pr.body || "") === newBody) {
+              core.info("PR body is already up to date.");
+              return;
+            }
+
+            try {
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                body: newBody,
+              });
+              core.info("PR body updated successfully.");
+            } catch (error) {
+              if (error.status === 403) {
+                core.setFailed("Unable to update this PR with GITHUB_TOKEN permissions (likely fork restrictions). Update title/body manually or use pull_request_target with strict safeguards.");
+                return;
+              }
+              throw error;
+            }
