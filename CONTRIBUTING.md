@@ -7,8 +7,14 @@ No install step beyond Python 3.9+ — tito is stdlib-only.
 ```
 git clone <repo>
 cd tito
-python3 -m unittest discover -s tests -v
+scripts/test.sh
 ```
+
+`scripts/` holds small dev helpers: `scripts/test.sh` runs the suite
+(below), `scripts/update.sh` re-runs `tito.py install` so a local edit to
+`tito.py` is redeployed to `~/.local/bin/tito` and picked up by your own
+Claude Code hook, and `scripts/commit.sh` wraps `cz commit` (see "Commit
+messages" below).
 
 ## Design principles
 
@@ -36,11 +42,11 @@ Scopes are enforced via [commitizen](https://commitizen-tools.github.io/commitiz
 | `tests` | `tests/` |
 | `*` (other) | anything else — pick "other" and type a custom scope |
 
-Install commitizen (`brew install commitizen`), then run `cz commit` (or
-`cz c`) instead of `git commit` — it walks through type, scope, and
-description and produces a correctly formatted message. `cz check
---message "..."` validates a message without committing (useful in a
-pre-commit hook or CI).
+Install commitizen (`brew install commitizen`), then run `scripts/commit.sh`
+(or `cz commit` / `cz c` directly) instead of `git commit` — it walks
+through type, scope, and description and produces a correctly formatted
+message. `cz check --message "..."` validates a message without
+committing (useful in a pre-commit hook or CI).
 
 ## Tests
 
@@ -59,8 +65,11 @@ blindly):
 Run everything:
 
 ```
-python3 -m unittest discover -s tests -v
+scripts/test.sh
 ```
+
+(equivalent to `python3 -m unittest discover -s tests -v`, run from the
+repo root).
 
 When you add a filter or change its output shape, add a golden test: raw fixture in → expected compact string out, following the pattern in `tests/extensions/git/test_git.py`. These tests are the executable spec of what "compact" means for each command.
 

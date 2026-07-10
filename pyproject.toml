@@ -56,13 +56,9 @@ choices = [
     { value = "extensions", name = "extensions: bundled or user filters (extensions/)" },
     { value = "docs", name = "docs: docs/, README, CONTRIBUTING.md, CLAUDE.md" },
     { value = "tests", name = "tests: tests/" },
-    { value = "other", name = "* other: anything else — type a custom scope next" },
+    { value = "scripts", name = "scripts: scripts/" },
+    { value = "*", name = "* other: anything else — type a custom scope next" },
 ]
-
-[[tool.commitizen.customize.questions]]
-type = "input"
-name = "custom_scope"
-message = "Custom scope (only if you picked 'other' above, else press Enter)"
 
 [[tool.commitizen.customize.questions]]
 type = "input"

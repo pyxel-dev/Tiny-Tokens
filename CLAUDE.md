@@ -190,6 +190,21 @@ test-layout table describes a larger target structure (`core/`,
 yet; treat it as where new test files should land, not as what exists
 today.
 
+## Scripts
+
+`scripts/` holds dev-only shell wrappers, not part of `tito.py` itself:
+
+- `scripts/test.sh` — `cd`s to the repo root and runs
+  `python3 -m unittest discover -s tests -v`.
+- `scripts/update.sh` — `cd`s to the repo root and runs `python3 tito.py
+  install` (`cmd_install`, above), so a local edit to `tito.py` is
+  redeployed to `~/.local/bin/tito` and the hook re-registered. Run this
+  after any change to `tito.py` you want your own Claude Code session to
+  pick up.
+- `scripts/commit.sh` — `cd`s to the repo root and runs `cz commit "$@"`
+  (commitizen's Conventional Commits wizard, see "Commit messages"
+  below), failing with an install hint if `cz` isn't on `PATH`.
+
 ## Commit messages
 
 Every commit is Conventional Commits with a required scope:
