@@ -13,3 +13,58 @@ keywords = ["cli", "llm", "tokens", "proxy"]
 [project.urls]
 Homepage = "https://github.com/pyxel-dev/Tiny-Tokens"
 Repository = "https://github.com/pyxel-dev/Tiny-Tokens"
+
+[tool.commitizen]
+name = "cz_customize"
+version = "0.0.0"
+version_files = ["pyproject.toml:version"]
+tag_format = "v$version"
+
+[tool.commitizen.customize]
+message_template = "{{change_type}}({{custom_scope if custom_scope else scope}}): {{message}}"
+example = "feat(extensions): add git"
+schema = "<type>(<scope>): <body>"
+schema_pattern = "(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\\(.+\\))?:\\s.+"
+bump_pattern = "^(feat|fix|refactor|perf)"
+bump_map = { feat = "MINOR", fix = "PATCH", refactor = "PATCH", perf = "PATCH" }
+info = "Scopes: core (tito.py itself), extensions (extensions/), docs (docs/, README, CONTRIBUTING, CLAUDE.md), tests (tests/), or 'other' for anything else (the * catch-all) — you'll be asked to type it."
+
+[[tool.commitizen.customize.questions]]
+type = "list"
+name = "change_type"
+message = "Select the type of change you are committing"
+choices = [
+    { value = "feat", name = "feat: A new feature" },
+    { value = "fix", name = "fix: A bug fix" },
+    { value = "docs", name = "docs: Documentation only changes" },
+    { value = "style", name = "style: Formatting only, no code change" },
+    { value = "refactor", name = "refactor: Neither fixes a bug nor adds a feature" },
+    { value = "perf", name = "perf: A code change that improves performance" },
+    { value = "test", name = "test: Adding or correcting tests" },
+    { value = "build", name = "build: Build process or auxiliary tools" },
+    { value = "ci", name = "ci: CI configuration" },
+    { value = "chore", name = "chore: Other changes that don't touch src or tests" },
+    { value = "revert", name = "revert: Revert to a previous commit" },
+]
+
+[[tool.commitizen.customize.questions]]
+type = "list"
+name = "scope"
+message = "Scope of this change"
+choices = [
+    { value = "core", name = "core: tito.py dispatch/registry/hook/stats/install" },
+    { value = "extensions", name = "extensions: bundled or user filters (extensions/)" },
+    { value = "docs", name = "docs: docs/, README, CONTRIBUTING.md, CLAUDE.md" },
+    { value = "tests", name = "tests: tests/" },
+    { value = "other", name = "* other: anything else — type a custom scope next" },
+]
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "custom_scope"
+message = "Custom scope (only if you picked 'other' above, else press Enter)"
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "message"
+message = "Short description of the change"

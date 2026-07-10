@@ -20,6 +20,28 @@ These are load-bearing — PRs that violate them will get pushback:
 - **stdlib only, single file.** This is a deliberate constraint, not an oversight. Don't add a dependency or split `tito.py` into a package without discussing it first.
 - **Exit codes are sacred.** Whatever the wrapped command would have returned, tito returns. Never swallow or remap it.
 
+## Commit messages
+
+Commits follow Conventional Commits with a required scope:
+`<type>(<scope>): <description>`, e.g. `feat(extensions): add git`.
+
+Scopes are enforced via [commitizen](https://commitizen-tools.github.io/commitizen/)
+(`[tool.commitizen]` in `pyproject.toml`, `cz_customize` provider):
+
+| Scope | Covers |
+|---|---|
+| `core` | `tito.py` itself — dispatch, registry, hook rewriter, stats, install |
+| `extensions` | bundled or user filters (`extensions/`) |
+| `docs` | `docs/`, `README.md`, `CONTRIBUTING.md`, `CLAUDE.md` |
+| `tests` | `tests/` |
+| `*` (other) | anything else — pick "other" and type a custom scope |
+
+Install commitizen (`brew install commitizen`), then run `cz commit` (or
+`cz c`) instead of `git commit` — it walks through type, scope, and
+description and produces a correctly formatted message. `cz check
+--message "..."` validates a message without committing (useful in a
+pre-commit hook or CI).
+
 ## Tests
 
 `unittest`, one file per concern. Current layout (still growing — treat

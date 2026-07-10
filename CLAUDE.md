@@ -190,6 +190,18 @@ test-layout table describes a larger target structure (`core/`,
 yet; treat it as where new test files should land, not as what exists
 today.
 
+## Commit messages
+
+Every commit is Conventional Commits with a required scope:
+`<type>(<scope>): <description>`, e.g. `feat(extensions): add git`. Scope
+is one of `core` (`tito.py` itself), `extensions` (`extensions/`), `docs`
+(`docs/`, `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`), `tests`
+(`tests/`), or any other short scope name when none of those fit (the `*`
+catch-all — see `CONTRIBUTING.md`). Enforced via commitizen
+(`[tool.commitizen]` in `pyproject.toml`). When committing on the user's
+behalf, write messages in this format rather than plain
+`git commit -m "..."`.
+
 ## Design constraints
 
 - **Stdlib only, single file.** Stated design constraint, not an oversight
